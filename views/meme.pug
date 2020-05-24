@@ -1,0 +1,20 @@
+html
+    head
+        title= mem
+    style
+        include ../style.css
+    body
+        h1= "History of prices of meme no. "
+        h2= meme.id.toString()
+        table
+            each price in meme.priceTable
+                tr
+                    td #{price.toString()}
+
+        form
+            input(type='number' id='price')
+            | New price
+            br
+            input(type='submit' value='Submit' id = 'button')
+            |
+        script(src="/script/script.js")

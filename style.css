@@ -1,0 +1,21 @@
+img {
+    height: 300px;
+    width: 300px;
+    padding: 20px;
+}
+
+
+table, th, td {
+    border: 1px solid black;
+    font-family: "Amiri Quran", serif;
+    color: darkcyan;
+    padding: 20px;
+}
+
+form {
+    padding: 20px;
+}
+
+input {
+    padding: 5px;
+}
