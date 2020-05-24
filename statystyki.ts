@@ -4,21 +4,20 @@ import {Database} from "sqlite3";
 import {promisify} from 'util';
 import * as fs from 'fs';
 
-let open = promisify(fs.open);
+const open = promisify(fs.open);
 let db : Database;
 sqlite3.verbose();
 db = new sqlite3.Database('baza.db');
 
-let server = createServer(async (req, res) => {
-    console.log(req.url);
+const server = createServer(async (req, res) => {
     res.writeHead(200, {'Content-Type' : 'text/html'});
-    if (req.url == "/statystyki") {
+    if (req.url === "/statystyki") {
         res.write("<h1>Statystyki</h1>");
         db.all('SELECT sciezka, liczba FROM wyswietlenia;', [], (err, rows) => {
             if (err)
                 throw (err);
 
-            for (let {sciezka, liczba} of rows) {
+            for (const {sciezka, liczba} of rows) {
                 res.write(sciezka + '->' + liczba + '<br>');
             }
             res.end();
@@ -40,16 +39,26 @@ let server = createServer(async (req, res) => {
     }
 });
 
-async function zalozBaze() {
-    await db.run('CREATE TABLE IF NOT EXISTS wyswietlenia (sciezka VARCHAR(255), liczba INT);');
+async function zalozBaze() : Promise<any> {
+    return new Promise<any>((resolve) => {
+        db.run('DROP TABLE IF EXISTS wyswietlenia);', async () => {
+            await db.run('CREATE TABLE wyswietlenia (sciezka VARCHAR(255), liczba INT);');
+            resolve();
+        });
+    });
+}
+
+async function createDatabase(callback) {
+    db.run('DROP TABLE IF EXISTS wyswietlenia', () => {
+        db.run('CREATE TABLE wyswietlenia (sciezka VARCHAR(255), liczba INT);', callback);
+    });
 }
 
 function wystapienie(filename : string) {
-    console.log('SELECT liczba from wyswietlenia WHERE sciezka = "' + filename + '";');
-    return new Promise<any>(function(resolve, reject) {
+    return new Promise<any>((resolve, reject) => {
         db.get('SELECT liczba from wyswietlenia WHERE sciezka = "' + filename + '";', (error, result) => {
             let num = NaN;
-            if (result != undefined)
+            if (result !== undefined)
                 num = result.liczba;
             if (isNaN(num))
                 num = 1;
@@ -64,10 +73,4 @@ function wystapienie(filename : string) {
     });
 }
 
-async function start() {
-    await zalozBaze();
-    server.listen(8080);
-}
-
-start();
-
+createDatabase(() => {server.listen(8080)});
