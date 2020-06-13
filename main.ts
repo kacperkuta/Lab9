@@ -7,7 +7,9 @@ class MemesFileService {
         sqlite3.verbose();
         const db = new sqlite3.Database('baza.db');
         await db.run('DROP TABLE IF EXISTS memes', () => {
-            db.run('CREATE TABLE IF NOT EXISTS memes (id INT UNIQUE, name VARCHAR(255), price INT, url VARCHAR(510));', callback);
+            db.run('CREATE TABLE IF NOT EXISTS memes (id INT UNIQUE, name VARCHAR(255), price INT, url VARCHAR(510));', () => {
+                db.run('CREATE TABLE IF NOT EXISTS meme_editors (meme_id INT, user VARCHAR(50));', callback);
+            });
         });
     }
 
@@ -74,6 +76,7 @@ class Meme {
     setProperHist() {
         const f: Buffer = fs.readFileSync('./prices/' + this._id + '.prices');
         let pricesString: string = f.toString();
+        this._priceTable = new Array<number>();
         while (pricesString.length > 0) {
             this._priceTable.push(+pricesString.substring(0, pricesString.search(',')));
             pricesString = pricesString.substring(pricesString.search(' ') + 1);
@@ -95,6 +98,11 @@ class Meme {
     }
 }
 
+function add_editor(user, memeId) {
+    const db = new sqlite3.Database('baza.db');
+    db.run("INSERT INTO meme_editors (meme_id, user) VALUES (" + user + ", " + memeId + ");", () => undefined);
+}
+
 function get_meme(id: number): Promise<Meme> {
     return new Promise<Meme>(((resolve) => {
         const db: sqlite3.Database = new sqlite3.Database('baza.db');
@@ -107,35 +115,127 @@ function get_meme(id: number): Promise<Meme> {
     }))
 }
 
+function check_timeout(req) {
+    if (req.session.views) {
+        req.session.views++
+    } else {
+        req.session.views = 1;
+    }
+    if (req.session.exp) {
+        if (new Date(Date.now()) > new Date(req.session.exp)) {
+            req.session.views = 1;
+            req.session.logged = false;
+            req.session.username = null;
+            req.session.exp = new Date(Date.now() + 15 * 60 * 1000);
+        }
+    } else {
+        req.session.exp = new Date(Date.now() + 15 * 60 * 1000);
+    }
+}
+
 const createCallback = async () => {
     await MemesFileService.addMemes();
     app.get('/', (req, res) => {
+        check_timeout(req);
         const db: sqlite3.Database = new sqlite3.Database('baza.db');
         db.all("SELECT * FROM memes ORDER BY price DESC LIMIT 3;", [], (err, rows) => {
             const mostExp = new Array<Meme>();
             for (const {id, name, price, url} of rows) {
                 mostExp.push(new Meme(id, name, price, url));
             }
-            res.render('index', {title: 'Meme market', message: 'Hello there!', memes: mostExp})
+            let visibility: string = "display:none";
+            if (req.session.logged) {
+                visibility = "display:flex"
+            }
+            res.render('index', {
+                title: 'Meme market',
+                message: 'Hello there!',
+                memes: mostExp,
+                visited: req.session.views,
+                visibility: {visibility},
+                token: req.csrfToken()
+            })
+        });
+    });
+    app.post('/', (req, res) => {
+        req.session.logged = false;
+        check_timeout(req);
+        const db: sqlite3.Database = new sqlite3.Database('baza.db');
+        db.all("SELECT * FROM memes ORDER BY price DESC LIMIT 3;", [], (err, rows) => {
+            const mostExp = new Array<Meme>();
+            for (const {id, name, price, url} of rows) {
+                mostExp.push(new Meme(id, name, price, url));
+            }
+
+            res.render('index', {
+                title: 'Meme market',
+                message: 'Hello there!',
+                memes: mostExp,
+                visited: req.session.views,
+                visibility: 'display:none',
+                token: req.csrfToken()
+            })
         });
     });
     app.get('/meme/:memeId', async (req, res) => {
-        const meme = await get_meme(req.params.memeId);
-        res.render('meme', {meme});
-
+        check_timeout(req);
+        if (!req.session.logged) {
+            res.render("login", {token: req.csrfToken()});
+        } else {
+            const meme = await get_meme(req.params.memeId);
+            const price = req.body.price;
+            if (!isNaN(price)) {
+                await meme.changePrice(price);
+            }
+            res.render('meme', {meme, visited: req.session.views, token: req.csrfToken()});
+        }
     });
-    app.post('/meme/:memeId/:newPrice', async (req, res) => {
-        const meme = await get_meme(req.params.memeId);
-        const price = req.params.newPrice;
-        await meme.changePrice(price);
-        res.render('meme', {meme});
+    app.post('/meme/:memeId/', async (req, res) => {
+        check_timeout(req);
+        if (!req.body.us && !req.session.logged) {
+            res.render("login", {token: req.csrfToken()});
+        } else {
+            req.session.views++;
+            req.session.logged = true;
+            if (req.body.us) {
+                req.session.username = req.body.us;
+            }
+            const meme = await get_meme(req.params.memeId);
+            const price = req.body.price;
+            if (!isNaN(price)) {
+                add_editor(req.session.username, meme.id);
+                await meme.changePrice(price);
+            }
+            res.render('meme', {meme, visited: req.session.views, token: req.csrfToken()});
+        }
     });
     app.listen(port);
 };
 
+
 const express = require('express');
 const app = express();
 const port = 3000;
+const csurf = require('csurf');
+const cookieParser = require('cookie-parser');
+const csrfMiddleware = csurf({
+    cookie: true
+});
+
+const session = require('express-session');
+const MySQLStore = require('express-mysql-session')(session);
+
+const options = {
+    host: '127.0.0.1',
+    port: 3306,
+    user: 'a',
+    password: 'b',
+    database: 'session',
+    createDatabaseTable: true
+};
+
+const sessionStore = new MySQLStore(options);
+
 
 app.use(express.urlencoded({
     extended: true
@@ -143,7 +243,15 @@ app.use(express.urlencoded({
 app.set('view engine', 'pug');
 app.set('views', __dirname + '/views');
 app.use("/script", express.static(path.join(__dirname, ".")));
-
+app.use(session({
+    name: "session",
+    secret: "secret",
+    resave: true,
+    saveUninitialized: true,
+    store: sessionStore
+}));
+app.use(cookieParser());
+app.use(csrfMiddleware);
 
 MemesFileService.createDatabase(createCallback);
 

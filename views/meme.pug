@@ -11,10 +11,11 @@ html
                 tr
                     td #{price.toString()}
 
-        form
-            input(type='number' id='price')
+        form(action= url method="POST")
+            input(type='number' name='price')
             | New price
             br
             input(type='submit' value='Submit' id = 'button')
             |
-        script(src="/script/script.js")
+            input(type="hidden" name="_csrf" value=token)
+        p Visited sites: #{visited}

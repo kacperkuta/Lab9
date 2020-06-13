@@ -19,3 +19,7 @@ form {
 input {
     padding: 5px;
 }
+
+#logout {
+    margin: 10px;
+}

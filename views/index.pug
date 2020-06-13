@@ -1,6 +1,9 @@
 html
     head
         title= title
+        form(id="logout" style=visibility action=url method='POST')
+            input(type="submit" value="Log out")
+            input(type="hidden" name="_csrf" value=token)
     style
         include ../style.css
     body
@@ -13,3 +16,5 @@ html
                     a(href="meme/" + meme.id) #{meme.name}
                     img(src=meme.url)
                     p Price: #{meme.price}
+        p Visited sites: #{visited}
+

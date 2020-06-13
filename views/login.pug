@@ -1,0 +1,18 @@
+html
+    head
+        title= "Log in"
+    style
+        include ../style.css
+    body
+        h1 Log in!
+        form(action= url method="POST")
+            input(type='username' name = 'us')
+            | username
+            br
+            br
+            input(type="password" name = 'pas')
+            | password
+            br
+            input(type="submit" value="Log in" id = 'loginbut')
+            input(type="hidden" name="_csrf" value=token)
+
